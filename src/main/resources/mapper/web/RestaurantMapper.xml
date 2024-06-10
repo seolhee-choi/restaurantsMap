@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="web.restaurant">
+
+    <!-- 맛집 검색 -->
+    <select id="getRestaurantList" resultType="camelMap" parameterType="hashmap">
+        SELECT
+            A.RESTAURANT_ID
+            , A.FAVORITE_STATUS
+            , A.AREA
+            , A.RESTAURANT_NAME
+            , A.CATEGORY
+            , A.JIBUN_ADDRESS
+            , A.ROAD_ADDRESS
+            , A.COORDINATE_X
+            , A.COORDINATE_Y
+            , A.TEL
+            , A.CREATE_DATE
+            , SUM(B.RATING)         AS TOTAL_RATING
+            , B.USE_YN
+            , B.COM_CODE
+            , B.COM_CODE_NM
+            , COUNT(B.REVIEW_ID)    AS REVIEW_COUNT
+            , ROUND(SUM(B.RATING) / COUNT(B.REVIEW_ID), 1) AS AVG_RATING
+          FROM TB_RESTAURANT        A
+          LEFT JOIN TB_REVIEW       B
+            ON A.RESTAURANT_ID = B.RESTAURANT_ID
+         WHERE 1=1
+        <if test="placeList != null">
+           AND A.RESTAURANT_ID IN
+           <foreach collection="placeList" item="item" index="index" open="(" close=")" separator=",">
+               #{item}
+           </foreach>
+        </if>
+        <choose>
+            <when test="status == 'admin'">
+                <if test="useYn == null or useYn == ''">
+                    AND (A.FAVORITE_STATUS = 'N' OR A.FAVORITE_STATUS = 'Y')
+                </if>
+                <if test="restrNm != null and restrNm != ''">
+                    AND LOWER(A.RESTAURANT_NAME) LIKE CONCAT('%', LOWER(#{restrNm}), '%')
+                </if>
+                <if test="srchCategory != null and srchCategory != ''">
+                    AND A.CATEGORY LIKE CONCAT('%', (#{srchCategory}), '%')
+                </if>
+                <if test="useYn != null and useYn != ''">
+                    AND A.FAVORITE_STATUS = #{useYn}
+                </if>
+                <if test="grpCd != null and grpCd != ''">
+                    AND CONCAT(',', B.COM_CODE, ',') LIKE CONCAT('%,', #{grpCd}, ',%')
+                </if>
+            </when>
+            <otherwise>
+                AND B.USE_YN = 'Y'
+            </otherwise>
+        </choose>
+        GROUP BY A.RESTAURANT_ID
+    </select>
+
+    <!-- 해시태그로 맛집 검색 -->
+    <select id="getRestaurantByHashtag" resultType="hashmap" parameterType="hashmap">
+        SELECT
+            A.RESTAURANT_ID         AS id
+            , A.FAVORITE_STATUS     AS favoriteStatus
+            , A.AREA                AS distance
+            , A.RESTAURANT_NAME     AS place_name
+            , A.CATEGORY            AS category
+            , A.JIBUN_ADDRESS       AS address_name
+            , A.ROAD_ADDRESS        AS road_address_name
+            , A.COORDINATE_X        AS x
+            , A.COORDINATE_Y        AS y
+            , A.TEL                 AS phone
+            , SUM(B.RATING)         AS totalRating
+            , B.COM_CODE_NM         AS hash_tag
+            , COUNT(B.REVIEW_ID)    AS totalReview
+            , ROUND(SUM(B.RATING) / COUNT(B.REVIEW_ID), 1) AS avgRating
+        FROM TB_RESTAURANT      A
+        LEFT JOIN TB_REVIEW     B
+          ON A.RESTAURANT_ID = B.RESTAURANT_ID
+         AND B.USE_YN = 'Y'
+       WHERE 1=1
+         AND A.FAVORITE_STATUS = 'Y'
+       GROUP BY A.RESTAURANT_ID
+       <if test="keyword != null and keyword != ''">
+       HAVING GROUP_CONCAT(DISTINCT B.COM_CODE_NM SEPARATOR ',') LIKE CONCAT('%', #{keyword}, '%');
+       </if>
+    </select>
+
+    <!-- 마커 클릭시 해당 맛집만 검색 -->
+    <select id="getRestaurantByName" resultType="hashmap" parameterType="hashmap">
+        SELECT
+            A.RESTAURANT_ID         AS id
+            , A.FAVORITE_STATUS     AS favoriteStatus
+            , A.AREA                AS distance
+            , A.RESTAURANT_NAME     AS place_name
+            , A.CATEGORY            AS category
+            , A.JIBUN_ADDRESS       AS address_name
+            , A.ROAD_ADDRESS        AS road_address_name
+            , A.COORDINATE_X        AS x
+            , A.COORDINATE_Y        AS y
+            , A.TEL                 AS phone
+            , SUM(B.RATING)         AS totalRating
+            , B.COM_CODE_NM         AS hash_tag
+            , COUNT(B.REVIEW_ID)    AS totalReview
+            , ROUND(SUM(B.RATING) / COUNT(B.REVIEW_ID), 1) AS avgRating
+        FROM TB_RESTAURANT      A
+        LEFT JOIN TB_REVIEW     B
+          ON A.RESTAURANT_ID = B.RESTAURANT_ID
+        WHERE 1=1
+          AND A.FAVORITE_STATUS = 'Y'
+        <if test="restaurantName != null and restaurantName != ''">
+          AND A.RESTAURANT_NAME = #{restaurantName}
+        </if>
+          AND B.USE_YN = 'Y'
+        GROUP BY A.RESTAURANT_ID
+    </select>
+    <!-- 맛집 등록 -->
+    <update id="saveRestaurant" parameterType="hashmap">
+        INSERT INTO TB_RESTAURANT
+          SET
+            RESTAURANT_ID       = #{id}
+            , FAVORITE_STATUS   = 'Y'
+            , AREA              = ''
+            , RESTAURANT_NAME   = #{place_name}
+            , CATEGORY          = #{category_name}
+            , JIBUN_ADDRESS     = #{address_name}
+            , ROAD_ADDRESS      = #{road_address_name}
+            , COORDINATE_X      = #{x}
+            , COORDINATE_Y      = #{y}
+            , TEL               = #{phone}
+            , CREATE_USER       = #{userId}
+            , CREATE_DATE       = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+            , UPDATE_DATE       = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+            , UPDATE_USER       = #{userId}
+        ON DUPLICATE KEY UPDATE
+            FAVORITE_STATUS     = 'Y'
+            , UPDATE_DATE       = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+            , UPDATE_USER       = #{userId};
+    </update>
+
+    <!-- 즐겨찾기 상태 검색 -->
+    <select id="getFavoriteStatus" resultType="camelMap" parameterType="hashmap">
+        SELECT
+             FAVORITE_STATUS
+          FROM
+            TB_RESTAURANT
+         WHERE RESTAURANT_ID = #{restaurantId}
+    </select>
+
+    <!-- 즐겨찾기 상태 변경-->
+    <update id="deleteRestaurant" parameterType="hashmap">
+        UPDATE TB_RESTAURANT
+           SET FAVORITE_STATUS = 'N'
+         WHERE RESTAURANT_ID = #{restaurantId};
+    </update>
+
+    <!-- 관리자페이지에서 즐겨찾기 상태 변경(추후 deleteRestaurant로 병합예정) -->
+    <update id="updateFavoriteStatus" parameterType="hashmap">
+        UPDATE TB_RESTAURANT
+           SET FAVORITE_STATUS = #{useYn}
+         WHERE RESTAURANT_ID = #{restaurantId};
+    </update>
+</mapper>

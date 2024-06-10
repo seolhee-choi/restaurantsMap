@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="web.review">
+
+    <!-- 리뷰 검색 -->
+    <select id="getReviewList" resultType="camelMap" parameterType="hashmap">
+        SELECT
+            A.REVIEW_ID
+            , A.RESTAURANT_ID
+            , A.DESCRIPTION
+            , A.RATING
+            , A.COM_CODE
+            , A.COM_CODE_NM
+            , A.CREATE_DATE
+            , A.CREATE_USER
+            , A.UPDATE_DATE
+            , A.USE_YN
+            , B.RESTAURANT_NAME
+            , C.ATTACH_ID
+            , C.REF_ID
+            , C.REF_SORT_NO
+            , C.GRP_CODE
+            , C.ORDER_NO
+            , C.FILE_NM
+            , C.SAVE_FILE_NM
+            , C.SAVE_FILE_PATH
+            , C.SIZE
+            , C.EXT
+            , C.CREATE_DATE
+            , GROUP_CONCAT(C.SAVE_FILE_NM ORDER BY C.CREATE_DATE SEPARATOR ', ') AS FILE_NAMES
+            , GROUP_CONCAT(C.FILE_NM ORDER BY C.CREATE_DATE SEPARATOR ', ') AS FILE_NAME_LIST
+            , GROUP_CONCAT(C.ATTACH_ID ORDER BY C.CREATE_DATE SEPARATOR ', ') AS ATTACH_ID_LIST
+            <if test="UPDATE_DATE != null and UPDATE_DATE != ''">
+             , A.UPDATE_DATE
+             , C.UPDATE_DATE
+            </if>
+         FROM TB_REVIEW          A
+         LEFT JOIN TB_RESTAURANT B
+           ON A.RESTAURANT_ID = B.RESTAURANT_ID
+         LEFT JOIN TB_ATTACH     C
+           ON A.REVIEW_ID = C.REF_ID
+        WHERE 1=1
+        <choose>
+            <when test="status == 'admin'">
+                <if test="useYn == null or useYn == ''">
+                    AND (A.USE_YN = 'N' OR A.USE_YN = 'Y')
+                </if>
+                <if test="useYn != null and useYn != ''">
+                    AND A.USE_YN = #{useYn}
+                </if>
+                <if test="keyword != null and keyword != ''">
+                    AND A.COM_CODE LIKE CONCAT('%', (#{keyword}), '%')
+                </if>
+                <if test="description != null and description != ''">
+                    AND LOWER(A.DESCRIPTION) LIKE CONCAT('%', LOWER(#{description}), '%')
+                </if>
+            </when>
+            <otherwise>
+                AND A.USE_YN = 'Y'
+            </otherwise>
+        </choose>
+        <if test="targetId != null">
+          AND A.RESTAURANT_ID = #{targetId}
+        </if>
+        <if test="targetReviewId != null">
+          AND A.REVIEW_ID = #{targetReviewId}
+        </if>
+        GROUP BY A.REVIEW_ID
+        ORDER BY MAX(A.CREATE_DATE) DESC
+    </select>
+
+    <!-- 리뷰 이미지 검색 -->
+    <select id="getReviewImage" resultType="camelMap" parameterType="hashmap">
+        SELECT
+            ATTACH_ID
+             , REF_ID
+             , REF_SORT_NO
+             , GRP_CODE
+             , ORDER_NO
+             , FILE_NM
+             , SAVE_FILE_NM
+             , SAVE_FILE_PATH
+             , SIZE
+             , EXT
+             , CREATE_USER
+             , CREATE_DATE
+         FROM TB_ATTACH         A
+         LEFT JOIN TB_REVIEW    B
+           ON A.REF_ID = B.REVIEW_ID
+        WHERE 1=1
+        <if test="targetId != null">
+          AND B.RESTAURANT_ID = #{targetId}
+        </if>
+        ORDER BY CREATE_DATE DESC
+    </select>
+
+    <!-- 리뷰 등록 및 수정 -->
+    <update id="saveReview" parameterType="hashmap">
+        INSERT INTO TB_REVIEW
+          SET
+            REVIEW_ID             = #{reviewId}
+            , RESTAURANT_ID       = #{restaurantId}
+            , DESCRIPTION  	      = #{description}
+            , RATING              = #{rating}
+            <if test="tagCodes != null">
+            , COM_CODE            = #{tagCodes}
+            , COM_CODE_NM         = #{tagNames}
+            </if>
+            , CREATE_USER         = #{__param.userId}
+            , CREATE_DATE         = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+            , UPDATE_DATE         = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+            , UPDATE_USER         = #{__param.userId}
+            , USE_YN              = 'Y'
+        ON DUPLICATE KEY UPDATE
+            RESTAURANT_ID         = #{restaurantId}
+            , DESCRIPTION  	      = #{description}
+            , RATING              = #{rating}
+            , UPDATE_DATE         = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+            , UPDATE_USER         = #{__param.userId}
+            , USE_YN              = 'Y'
+    </update>
+
+    <!-- 리뷰 이미지 등록 -->
+    <update id="saveReviewImage" parameterType="hashmap">
+        INSERT INTO TB_ATTACH
+          SET
+            ATTACH_ID           = #{attachId}
+            , REF_ID            = #{reviewId}
+            , REF_SORT_NO       = #{refSortNo}
+            , GRP_CODE          = 'R01'
+            , ORDER_NO          = 0
+            , FILE_NM	        = #{fileNm}
+            , SAVE_FILE_NM      = #{saveFileNm}
+            , SAVE_FILE_PATH    = #{saveFilePath}
+            , SIZE		        = #{size}
+            , EXT		        = #{ext}
+            , CREATE_USER       = #{userId}
+            , CREATE_DATE       = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+        ON DUPLICATE KEY UPDATE
+            REF_ID              = #{reviewId}
+            , REF_SORT_NO       = #{refSortNo}
+            , GRP_CODE          = 'R01'
+            , ORDER_NO          = 0
+            , FILE_NM	        = #{fileNm}
+            , SAVE_FILE_NM      = #{saveFileNm}
+            , SAVE_FILE_PATH    = #{saveFilePath}
+            , SIZE		        = #{size}
+            , EXT		        = #{ext}
+            , UPDATE_USER       = #{userId}
+            , UPDATE_DATE       = DATE_FORMAT(NOW(), '%Y%m%d%H%i%s')
+    </update>
+
+    <!-- 리뷰 이미지 삭제 -->
+    <delete id="deleteAttachImage" parameterType="hashmap">
+        DELETE FROM TB_ATTACH
+         WHERE ATTACH_ID = #{attachId};
+    </delete>
+
+    <!-- 리뷰 삭제 -->
+    <update id="deleteReview" parameterType="hashmap">
+        UPDATE TB_REVIEW
+           SET USE_YN = 'N'
+         WHERE REVIEW_ID = #{reviewId};
+    </update>
+
+    <!-- 리뷰 아이디 일치여부 검색 -->
+    <select id="getUserIdByReviewId" resultType="String" parameterType="String">
+        SELECT
+            CREATE_USER
+          FROM
+              TB_REVIEW
+         WHERE REVIEW_ID = #{reviewId}
+    </select>
+</mapper>
